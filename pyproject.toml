@@ -1,0 +1,11 @@
+[project]
+name = "toy-qwen"
+version = "0.1.0"
+description = "Toy LLM: GPT-2 vs Qwen3 architecture comparison on Apple Silicon"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.4.0",
+    "tiktoken>=0.9.0",
+    "datasets>=3.0.0",
+    "numpy>=2.0.0",
+]
