@@ -27,6 +27,7 @@ from models.registry import REGISTRY
 from utils.checkpoint import EarlyStopper, save_best_checkpoint, save_checkpoint, save_config, setup_run_dir
 from utils.generate import generate_sample
 from utils.logger import setup_logger
+from utils.tool import auto_device
 
 
 def _parse_args() -> argparse.Namespace:
@@ -37,7 +38,7 @@ def _parse_args() -> argparse.Namespace:
 
     # 实验变量 — 每次 run 可能不同，不写在 config 文件里
     p.add_argument("--impl",       default="torch",      choices=["torch", "scratch"])
-    p.add_argument("--device",     default=_auto_device())
+    p.add_argument("--device",     default=auto_device())
 
     # 训练配方覆盖 — TrainConfig 的临时调整，调参或快速测试用
     p.add_argument("--max-steps",  type=int,   default=None)
@@ -45,12 +46,6 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--lr",         type=float, default=None)
 
     return p.parse_args()
-
-
-def _auto_device() -> str:
-    if torch.backends.mps.is_available(): return "mps"
-    if torch.cuda.is_available():         return "cuda"
-    return "cpu"
 
 
 # ---------------------------------------------------------------------------
@@ -98,14 +93,11 @@ def eval_loss(model, loader, steps: int, device: str) -> float:
 def train() -> None:
     args = _parse_args()
 
-    entry = REGISTRY[args.model]
-    mcfg  = entry.model_cfg_cls()
-    tcfg  = entry.train_cfg_cls()
-    icfg  = entry.infer_cfg_cls()
-
-    # 实验变量直接赋值（无条件覆盖）
-    mcfg.impl = args.impl
-    device    = args.device
+    entry  = REGISTRY[args.model]
+    mcfg   = entry.model_cfg_cls(impl=args.impl)
+    tcfg   = entry.train_cfg_cls()
+    icfg   = entry.infer_cfg_cls()
+    device = args.device
 
     # 训练配方临时覆盖（仅 CLI 显式传入时生效）
     if args.max_steps  is not None: tcfg.max_steps  = args.max_steps

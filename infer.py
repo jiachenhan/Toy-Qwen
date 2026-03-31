@@ -3,7 +3,7 @@ Inference entry point. Loads a checkpoint from a run directory and generates tex
 
 配置优先级（低 → 高）：
   推理默认值  configs/<model>.py :: InferConfig  — prompt / tokens / temperature
-  运行时记录  config.json                        — model_name / impl / device（训练时写入）
+  运行时记录  config.json                        — model_name / impl
   CLI 覆盖    --prompt / --tokens / --temperature / --device
 
 _DEFAULT_CKPT 是唯一需要手动更新的位置，每次训完改这一行。
@@ -22,6 +22,7 @@ import torch
 
 from models.registry import REGISTRY
 from utils.generate import generate_sample
+from utils.tool import auto_device
 
 # 每次训完只需更新这一行
 _DEFAULT_CKPT = "runs/nano_gpt2_torch_20260331_214540/ckpt_best.pt"
@@ -38,8 +39,8 @@ def _parse_args(icfg) -> argparse.Namespace:
     p.add_argument("--tokens",      type=int,   default=icfg.max_new_tokens)
     p.add_argument("--temperature", type=float, default=icfg.temperature)
 
-    # 实验变量覆盖 — 默认从 config.json 读取，显式传入时优先
-    p.add_argument("--device",      default=None)
+    # 实验变量覆盖 — 默认自动识别本地环境
+    p.add_argument("--device",      default=auto_device())
 
     return p.parse_args()
 
@@ -67,9 +68,7 @@ def main() -> None:
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
     mcfg   = entry.model_cfg_cls(**cfg["model"])
-    device = args.device or cfg["run"]["device"]
-    if device == "mps" and not torch.backends.mps.is_available():
-        device = "cpu"
+    device = args.device
 
     model = entry.model_cls(mcfg).to(device)
     ckpt  = torch.load(ckpt_path, map_location=device, weights_only=True)
