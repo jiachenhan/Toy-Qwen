@@ -1,7 +1,7 @@
 [project]
 name = "toy-qwen"
 version = "0.1.0"
-description = "Toy LLM: GPT-2 vs Qwen3 architecture comparison on Apple Silicon"
+description = "Understanding Large Language Models from Scratch on Apple Silicon"
 requires-python = ">=3.12"
 dependencies = [
     "torch>=2.4.0",
