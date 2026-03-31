@@ -8,4 +8,18 @@ dependencies = [
     "tiktoken>=0.9.0",
     "datasets>=3.0.0",
     "numpy>=2.0.0",
+    "httpx[socks]>=0.28.0",
 ]
+
+[project.scripts]
+toy-peek    = "data.peek:main"
+toy-prepare = "data.prepare:main"
+toy-train   = "train:main"
+toy-infer   = "infer:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["data", "models", "optim", "configs", "utils"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

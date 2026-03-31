@@ -44,7 +44,7 @@ def build_loaders(
     cache_dir: Path | str,
     context_len: int,
     batch_size: int,
-    num_workers: int = 2,
+    num_workers: int = 0,
 ) -> tuple[DataLoader, DataLoader, dict]:
     """Return (train_loader, val_loader, meta)."""
     cache_dir = Path(cache_dir)
