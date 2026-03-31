@@ -35,10 +35,12 @@ def setup_run_dir(model_name: str) -> Path:
     return run_dir
 
 
-def save_config(mcfg, tcfg, run_dir: Path) -> None:
+def save_config(mcfg, tcfg, run_dir: Path, *, model_name: str, impl: str, device: str) -> None:
     config = {
+        "model_name": model_name,
         "model": dataclasses.asdict(mcfg),
         "train": dataclasses.asdict(tcfg),
+        "run":   {"impl": impl, "device": device},
     }
     (run_dir / "config.json").write_text(json.dumps(config, indent=2))
 

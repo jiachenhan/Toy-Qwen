@@ -1,14 +1,19 @@
 """
 Training entry point.
 
-Config is loaded in priority order (low → high):
-  1. configs/<model>.py  — model architecture + training hyperparams (incl. device)
-  2. CLI args            — --model, --device, --max-steps, etc.
+配置优先级（低 → 高）：
+  架构定义   configs/<model>.py :: ModelConfig   — d_model / n_layers / ...
+  训练配方   configs/<model>.py :: TrainConfig   — lr / batch_size / ...
+  实验变量   CLI --impl / --device               — 每次 run 可能不同
+  临时覆盖   CLI --max-steps / --batch-size / --lr — 调参或快速测试用
+
+CLI --model 是配置入口，决定加载哪个 configs/<model>.py。
 
 Usage:
     uv run toy-train
-    uv run toy-train --model nano_gpt2
-    uv run toy-train --device cpu --max-steps 100000
+    uv run toy-train --impl torch
+    uv run toy-train --model nano_gpt2 --impl scratch
+    uv run toy-train --impl scratch --device cpu --max-steps 2400
 """
 
 import argparse
@@ -22,6 +27,30 @@ from models.registry import REGISTRY
 from utils.checkpoint import EarlyStopper, save_best_checkpoint, save_checkpoint, save_config, setup_run_dir
 from utils.generate import generate_sample
 from utils.logger import setup_logger
+
+
+def _parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Train a toy LLM")
+
+    # 配置入口 — 决定加载哪个 configs/<model>.py
+    p.add_argument("--model",      default="nano_gpt2",  choices=list(REGISTRY.keys()))
+
+    # 实验变量 — 每次 run 可能不同，不写在 config 文件里
+    p.add_argument("--impl",       default="torch",      choices=["torch", "scratch"])
+    p.add_argument("--device",     default=_auto_device())
+
+    # 训练配方覆盖 — TrainConfig 的临时调整，调参或快速测试用
+    p.add_argument("--max-steps",  type=int,   default=None)
+    p.add_argument("--batch-size", type=int,   default=None)
+    p.add_argument("--lr",         type=float, default=None)
+
+    return p.parse_args()
+
+
+def _auto_device() -> str:
+    if torch.backends.mps.is_available(): return "mps"
+    if torch.cuda.is_available():         return "cuda"
+    return "cpu"
 
 
 # ---------------------------------------------------------------------------
@@ -42,17 +71,6 @@ def _infinite_loader(loader):
     """Yield batches from loader indefinitely."""
     while True:
         yield from loader
-
-
-def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Train a toy LLM")
-    p.add_argument("--model",      default="nano_gpt2", choices=list(REGISTRY.keys()))
-    p.add_argument("--device",     default=None, help="Override TrainConfig.device")
-    p.add_argument("--max-steps",  type=int,   default=None, help="Override TrainConfig.max_steps")
-    p.add_argument("--batch-size", type=int,   default=None, help="Override TrainConfig.batch_size")
-    p.add_argument("--lr",         type=float, default=None, help="Override TrainConfig.lr")
-    return p.parse_args()
-
 
 # ---------------------------------------------------------------------------
 # Eval
@@ -85,19 +103,17 @@ def train() -> None:
     tcfg  = entry.train_cfg_cls()
     icfg  = entry.infer_cfg_cls()
 
-    # CLI overrides
-    if args.device     is not None: tcfg.device     = args.device
+    # 实验变量直接赋值（无条件覆盖）
+    mcfg.impl = args.impl
+    device    = args.device
+
+    # 训练配方临时覆盖（仅 CLI 显式传入时生效）
     if args.max_steps  is not None: tcfg.max_steps  = args.max_steps
     if args.batch_size is not None: tcfg.batch_size = args.batch_size
     if args.lr         is not None: tcfg.lr         = args.lr
 
-    device = tcfg.device
-    if device == "mps" and not torch.backends.mps.is_available():
-        print("MPS not available, falling back to CPU")
-        device = "cpu"
-
-    run_dir = setup_run_dir(args.model)
-    save_config(mcfg, tcfg, run_dir)
+    run_dir = setup_run_dir(f"{args.model}_{args.impl}")
+    save_config(mcfg, tcfg, run_dir, model_name=args.model, impl=args.impl, device=device)
     logger = setup_logger(run_dir / "train.log")
 
     train_loader, val_loader, _ = build_loaders(
@@ -110,7 +126,7 @@ def train() -> None:
     )
 
     logger.info(f"Run dir : {run_dir}")
-    logger.info(f"Model   : {args.model} | params: {model.n_params():,} | device: {device}")
+    logger.info(f"Model   : {args.model} ({mcfg.impl}) | params: {model.n_params():,} | device: {device}")
     logger.info(f"Steps   : max {tcfg.max_steps:,} | eval every {tcfg.eval_interval:,} | ckpt every {tcfg.ckpt_interval:,}")
     logger.info(f"Patience: {tcfg.early_stop_patience} evals without improvement")
     logger.info("")

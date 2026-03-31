@@ -1,13 +1,17 @@
 """
 Inference entry point. Loads a checkpoint from a run directory and generates text.
 
-Config defaults come from InferConfig in configs/<model>.py.
+配置优先级（低 → 高）：
+  推理默认值  configs/<model>.py :: InferConfig  — prompt / tokens / temperature
+  运行时记录  config.json                        — model_name / impl / device（训练时写入）
+  CLI 覆盖    --prompt / --tokens / --temperature / --device
+
+_DEFAULT_CKPT 是唯一需要手动更新的位置，每次训完改这一行。
 
 Usage:
     uv run toy-infer
-    uv run toy-infer --model nano_gpt2
-    uv run toy-infer --run runs/nano_gpt2_20260330_233710 --prompt "The dragon"
-    uv run toy-infer --tokens 300 --temperature 0.9
+    uv run toy-infer --ckpt runs/nano_gpt2_torch_20260331_120000/ckpt_step_0010000.pt
+    uv run toy-infer --prompt "The dragon" --tokens 300
 """
 
 import argparse
@@ -19,41 +23,51 @@ import torch
 from models.registry import REGISTRY
 from utils.generate import generate_sample
 
+# 每次训完只需更新这一行
+_DEFAULT_CKPT = "runs/nano_gpt2_torch_20260331_214540/ckpt_best.pt"
+
 
 def _parse_args(icfg) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate text from a saved checkpoint")
-    p.add_argument("--model",       default="nano_gpt2",   choices=list(REGISTRY.keys()))
-    p.add_argument("--run",         default=icfg.run_dir,         help="Path to run directory")
-    p.add_argument("--ckpt",        default=icfg.ckpt,            help="Checkpoint filename inside --run")
-    p.add_argument("--prompt",      default=icfg.prompt,          help="Text prompt to continue")
-    p.add_argument("--tokens",      type=int,   default=icfg.max_new_tokens, help="Number of tokens to generate")
-    p.add_argument("--temperature", type=float, default=icfg.temperature,    help="Sampling temperature (0 = greedy)")
-    p.add_argument("--device",      default=None, help="Override device (default: from config.json)")
+
+    # 每次训完只需更新 _DEFAULT_CKPT
+    p.add_argument("--ckpt",        default=_DEFAULT_CKPT)
+
+    # 推理默认值 — 来自 InferConfig，可 CLI 覆盖
+    p.add_argument("--prompt",      default=icfg.prompt)
+    p.add_argument("--tokens",      type=int,   default=icfg.max_new_tokens)
+    p.add_argument("--temperature", type=float, default=icfg.temperature)
+
+    # 实验变量覆盖 — 默认从 config.json 读取，显式传入时优先
+    p.add_argument("--device",      default=None)
+
     return p.parse_args()
 
 
 def main() -> None:
-    # First pass: get --model to load InferConfig defaults
+    # 第一步：解析 ckpt 路径 → 加载 config.json → 确定模型和 InferConfig 默认值
     pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--model", default="nano_gpt2", choices=list(REGISTRY.keys()))
+    pre.add_argument("--ckpt", default=_DEFAULT_CKPT)
     known, _ = pre.parse_known_args()
 
-    icfg = REGISTRY[known.model].infer_cfg_cls()
-    args = _parse_args(icfg)
-
-    run_dir   = Path(args.run)
-    ckpt_path = run_dir / args.ckpt
-    cfg_path  = run_dir / "config.json"
-
-    if not ckpt_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+    cfg_path = Path(known.ckpt).parent / "config.json"
     if not cfg_path.exists():
         raise FileNotFoundError(f"config.json not found: {cfg_path}")
 
-    entry  = REGISTRY[args.model]
-    cfg    = json.loads(cfg_path.read_text())
+    cfg        = json.loads(cfg_path.read_text())
+    model_name = cfg["model_name"]
+    entry      = REGISTRY[model_name]
+
+    # 第二步：用 InferConfig 默认值完整解析所有参数
+    icfg = entry.infer_cfg_cls()
+    args = _parse_args(icfg)
+
+    ckpt_path = Path(args.ckpt)
+    if not ckpt_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+
     mcfg   = entry.model_cfg_cls(**cfg["model"])
-    device = args.device or cfg["train"].get("device", "cpu")
+    device = args.device or cfg["run"]["device"]
     if device == "mps" and not torch.backends.mps.is_available():
         device = "cpu"
 
@@ -61,7 +75,7 @@ def main() -> None:
     ckpt  = torch.load(ckpt_path, map_location=device, weights_only=True)
     model.load_state_dict(ckpt["model"])
 
-    print(f"Loaded {args.model}  step={ckpt['step']:,}  val_loss={ckpt['val_loss']:.4f}  device={device}")
+    print(f"Loaded {model_name}  step={ckpt['step']:,}  val_loss={ckpt['val_loss']:.4f}  device={device}")
     print(f"Prompt: {args.prompt!r}")
     print()
 
