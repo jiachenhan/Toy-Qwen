@@ -5,8 +5,8 @@ Config defaults come from InferConfig in configs/<model>.py.
 
 Usage:
     uv run toy-infer
-    uv run toy-infer --model nano_gpt2_torch
-    uv run toy-infer --run runs/nano_gpt2_torch_20260330_233710 --prompt "The dragon"
+    uv run toy-infer --model nano_gpt2
+    uv run toy-infer --run runs/nano_gpt2_20260330_233710 --prompt "The dragon"
     uv run toy-infer --tokens 300 --temperature 0.9
 """
 
@@ -22,7 +22,7 @@ from utils.generate import generate_sample
 
 def _parse_args(icfg) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate text from a saved checkpoint")
-    p.add_argument("--model",       default="nano_gpt2_torch",   choices=list(REGISTRY.keys()))
+    p.add_argument("--model",       default="nano_gpt2",   choices=list(REGISTRY.keys()))
     p.add_argument("--run",         default=icfg.run_dir,         help="Path to run directory")
     p.add_argument("--ckpt",        default=icfg.ckpt,            help="Checkpoint filename inside --run")
     p.add_argument("--prompt",      default=icfg.prompt,          help="Text prompt to continue")
@@ -35,7 +35,7 @@ def _parse_args(icfg) -> argparse.Namespace:
 def main() -> None:
     # First pass: get --model to load InferConfig defaults
     pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--model", default="nano_gpt2_torch", choices=list(REGISTRY.keys()))
+    pre.add_argument("--model", default="nano_gpt2", choices=list(REGISTRY.keys()))
     known, _ = pre.parse_known_args()
 
     icfg = REGISTRY[known.model].infer_cfg_cls()

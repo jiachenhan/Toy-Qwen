@@ -20,6 +20,7 @@ class ModelConfig:
     n_layers: int = 4
     n_heads: int = 4       # d_model // n_heads = 32
     dropout: float = 0.0
+    impl: str = "torch"    # "torch" | "scratch"
 
 
 @dataclass
@@ -42,7 +43,7 @@ class TrainConfig:
 
 @dataclass
 class InferConfig:
-    run_dir: str = "runs/nano_gpt2_torch_20260330_233710"
+    run_dir: str = "runs/nano_gpt2_20260330_233710"
     ckpt: str = "ckpt_best.pt"
     prompt: str = "Once upon a time"
     max_new_tokens: int = 200

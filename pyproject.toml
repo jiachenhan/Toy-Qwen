@@ -18,7 +18,7 @@ toy-train   = "train:main"
 toy-infer   = "infer:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["data", "models", "optim", "configs", "utils"]
+packages = ["data", "models", "optim", "configs", "utils", "models/layers/torch", "models/layers/scratch", "optim/torch", "optim/scratch"]
 
 [build-system]
 requires = ["hatchling"]

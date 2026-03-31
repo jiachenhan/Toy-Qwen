@@ -7,7 +7,7 @@ Config is loaded in priority order (low → high):
 
 Usage:
     uv run toy-train
-    uv run toy-train --model nano_gpt2_torch
+    uv run toy-train --model nano_gpt2
     uv run toy-train --device cpu --max-steps 100000
 """
 
@@ -46,7 +46,7 @@ def _infinite_loader(loader):
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train a toy LLM")
-    p.add_argument("--model",      default="nano_gpt2_torch", choices=list(REGISTRY.keys()))
+    p.add_argument("--model",      default="nano_gpt2", choices=list(REGISTRY.keys()))
     p.add_argument("--device",     default=None, help="Override TrainConfig.device")
     p.add_argument("--max-steps",  type=int,   default=None, help="Override TrainConfig.max_steps")
     p.add_argument("--batch-size", type=int,   default=None, help="Override TrainConfig.batch_size")

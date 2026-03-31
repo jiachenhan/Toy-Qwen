@@ -1,16 +1,10 @@
 """
-Nano GPT-2 style model using PyTorch built-in modules.
+Attention layers — PyTorch high-level implementation.
 
-Purpose: validate the training pipeline before writing custom operators.
-
-Architecture:
-  - Learned absolute positional embedding
-  - TransformerBlock: LayerNorm → MHA → residual, LayerNorm → MLP → residual
-  - MLP activation: GELU
-  - Final LayerNorm + linear LM head (no weight tying)
+  CausalSelfAttention  — Multi-Head Attention with causal mask  (used by: GPT-2)
+  GQA                  — Grouped-Query Attention                (used by: Qwen3, TODO)
 """
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
@@ -18,18 +12,12 @@ from torch import Tensor
 from configs.nano_gpt2 import ModelConfig
 
 
-class MLP(nn.Module):
-    def __init__(self, cfg: ModelConfig) -> None:
-        super().__init__()
-        self.fc   = nn.Linear(cfg.d_model, 4 * cfg.d_model)
-        self.act  = nn.GELU()
-        self.proj = nn.Linear(4 * cfg.d_model, cfg.d_model)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.proj(self.act(self.fc(x)))
-
-
 class CausalSelfAttention(nn.Module):
+    """Multi-Head Causal Self-Attention using F.scaled_dot_product_attention.
+
+    Used by: GPT-2 (NanoGPT2)
+    """
+
     def __init__(self, cfg: ModelConfig) -> None:
         super().__init__()
         self.n_heads = cfg.n_heads
@@ -47,14 +35,14 @@ class CausalSelfAttention(nn.Module):
         # is_causal=True: no explicit mask needed, sdpa builds it internally
         """
             1. 注意力分数
-            scores = q @ k.transpose(-2, -1) 
-            # (B,4,T,32) @ (B,4,32,T) → (B,4,T,T)        
-                                                                            
+            scores = q @ k.transpose(-2, -1)
+            # (B,4,T,32) @ (B,4,32,T) → (B,4,T,T)
+
             scores = scores / (32 ** 0.5)
             # 除以 sqrt(head_dim)，防止点积太大
 
             2. 因果掩码：每个位置只能看到自己和之前的
-            mask = torch.triu(torch.ones(T,T), diagonal=1).bool() 
+            mask = torch.triu(torch.ones(T,T), diagonal=1).bool()
             scores = scores.masked_fill(mask, float('-inf')) # 未来位置设为 -inf
 
             施加掩码前的分数（随便填的数）：
@@ -66,7 +54,7 @@ class CausalSelfAttention(nn.Module):
             ↑ Query（当前位置）
 
             因果掩码是上三角（diagonal=1）：
-                    pos0  pos1  pos2  pos3 
+                    pos0  pos1  pos2  pos3
             pos0   [  F     T     T     T  ]   ← pos0 只能看 pos0，后面全掩掉
             pos1   [  F     F     T     T  ]   ← pos1 能看 pos0, pos1
             pos2   [  F     F     F     T  ]   ← pos2 能看 pos0~pos2
@@ -99,38 +87,3 @@ class CausalSelfAttention(nn.Module):
         out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         out = out.transpose(1, 2).contiguous().view(B, T, C)
         return self.proj(out)
-
-class TransformerBlock(nn.Module):
-    def __init__(self, cfg: ModelConfig) -> None:
-        super().__init__()
-        self.ln1  = nn.LayerNorm(cfg.d_model)
-        self.attn = CausalSelfAttention(cfg)
-        self.ln2  = nn.LayerNorm(cfg.d_model)
-        self.mlp  = MLP(cfg)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = x + self.attn(self.ln1(x))
-        x = x + self.mlp(self.ln2(x))
-        return x
-
-
-class NanoGPT2Torch(nn.Module):
-    def __init__(self, cfg: ModelConfig) -> None:
-        super().__init__()
-        self.cfg = cfg
-        self.tok_emb = nn.Embedding(cfg.vocab_size, cfg.d_model)
-        self.pos_emb = nn.Embedding(cfg.context_len, cfg.d_model)
-        self.blocks  = nn.ModuleList([TransformerBlock(cfg) for _ in range(cfg.n_layers)])
-        self.ln_f    = nn.LayerNorm(cfg.d_model)
-        self.lm_head = nn.Linear(cfg.d_model, cfg.vocab_size, bias=False)
-
-    def forward(self, idx: Tensor) -> Tensor:
-        T = idx.shape[1]
-        pos = torch.arange(T, device=idx.device)
-        x = self.tok_emb(idx) + self.pos_emb(pos)
-        for block in self.blocks:
-            x = block(x)
-        return self.lm_head(self.ln_f(x))   # (B, T, vocab_size)
-
-    def n_params(self) -> int:
-        return sum(p.numel() for p in self.parameters())

@@ -23,11 +23,11 @@ def _build() -> dict[str, RegistryEntry]:
     from configs.nano_gpt2 import InferConfig as NanoGPT2InferCfg
     from configs.nano_gpt2 import ModelConfig as NanoGPT2ModelCfg
     from configs.nano_gpt2 import TrainConfig as NanoGPT2TrainCfg
-    from models.nano_gpt2_torch import NanoGPT2Torch
+    from models.nano_gpt2 import NanoGPT2
 
     return {
-        "nano_gpt2_torch": RegistryEntry(
-            model_cls=NanoGPT2Torch,
+        "nano_gpt2": RegistryEntry(
+            model_cls=NanoGPT2,
             model_cfg_cls=NanoGPT2ModelCfg,
             train_cfg_cls=NanoGPT2TrainCfg,
             infer_cfg_cls=NanoGPT2InferCfg,
