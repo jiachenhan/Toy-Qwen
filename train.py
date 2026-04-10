@@ -30,13 +30,21 @@ from utils.logger import setup_logger
 from utils.tool import auto_device
 
 
+def _get_optimizer_cls(impl: str):
+    if impl == "torch":
+        from optim.torch.adamw import AdamW
+    else:
+        from optim.scratch.adamw import AdamW
+    return AdamW
+
+
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train a toy LLM")
 
     # 配置入口 — 决定加载哪个 configs/<model>.py
     p.add_argument("--model",      default="nano_gpt2",  choices=list(REGISTRY.keys()))
 
-    # 实验变量 — 每次 run 可能不同，不写在 config 文件里
+    # 实验变量 — 每次 run 可能不同
     p.add_argument("--impl",       default="torch",      choices=["torch", "scratch"])
     p.add_argument("--device",     default=auto_device())
 
@@ -52,7 +60,7 @@ def _parse_args() -> argparse.Namespace:
 # Training internals
 # ---------------------------------------------------------------------------
 
-def _train_step(model, x, y, optimizer, device: str) -> float:
+def _train_step(model, x, y, optimizer: torch.optim.Optimizer, device: str) -> float:
     x, y = x.to(device), y.to(device)
     logits = model(x)
     loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
@@ -113,9 +121,8 @@ def train() -> None:
     )
 
     model = entry.model_cls(mcfg).to(device)
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=tcfg.lr, weight_decay=tcfg.weight_decay
-    )
+    AdamW     = _get_optimizer_cls(args.impl)
+    optimizer = AdamW(model.parameters(), lr=tcfg.lr, weight_decay=tcfg.weight_decay)
 
     logger.info(f"Run dir : {run_dir}")
     logger.info(f"Model   : {args.model} ({mcfg.impl}) | params: {model.n_params():,} | device: {device}")

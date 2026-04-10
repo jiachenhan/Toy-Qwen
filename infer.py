@@ -25,7 +25,7 @@ from utils.generate import generate_sample
 from utils.tool import auto_device
 
 # 每次训完只需更新这一行
-_DEFAULT_CKPT = "runs/nano_gpt2_torch_20260331_214540/ckpt_best.pt"
+_DEFAULT_CKPT = "runs/nano_gpt2_torch_20260331_224551/ckpt_best.pt"
 
 
 def _parse_args(icfg) -> argparse.Namespace:
